@@ -360,7 +360,9 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
 .card.ghost .avatar { opacity: .55; }
 .card.ghost .years { font-style: italic; }
 
-.meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+/* The name and years, centred in the space beside the photo */
+.meta { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; text-align: center; }
+.meta > * { max-width: 100%; }
 .name {
   font: 700 17px/1.08 var(--serif); letter-spacing: .005em;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
@@ -376,6 +378,10 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.6px var(--cc, var(--other));
 }
 .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* No photo: a man's or woman's figure in the couple's tone */
+.avatar .figure { position: absolute; inset: 0; width: 100%; height: 100%; }
+.avatar .fg-body { fill: color-mix(in srgb, var(--cc, var(--other)) 42%, var(--avatar-bg)); }
+.avatar .fg-hair { fill: color-mix(in srgb, var(--cc, var(--other)) 70%, var(--ink)); }
 .avatar.sm { width: 32px; height: 32px; font-size: 13px; box-shadow: 0 0 0 1.5px var(--surface), 0 0 0 2.5px var(--cc, var(--other)); }
 .avatar.xs { width: 26px; height: 26px; font-size: 11px; box-shadow: 0 0 0 1px var(--cc, var(--other)); }
 .avatar.xl { width: 104px; height: 104px; font-size: 38px; }
@@ -489,7 +495,7 @@ body.panel-open .zoom { right: 420px; }
 /* ---------- Editing and suggestions ---------- */
 
 .avatar.lg { width: 64px; height: 64px; font-size: 24px; }
-.avatar.lg svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
+.avatar.lg > svg:not(.figure) { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
 
 .edit-box { margin: 26px 32px 0; padding-top: 20px; border-top: 1px solid var(--rule); }
 .edit-box h3 { margin: 0 0 12px; color: var(--muted); font-size: 10.5px; line-height: 1; }

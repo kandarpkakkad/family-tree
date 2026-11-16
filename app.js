@@ -59,7 +59,20 @@
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const person = (id) => people.get(id);
   const firstName = (p) => p.name.split(/\s+/)[0];
-  const initials = (p) => p.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => Array.from(w)[0]).join('').toUpperCase();
+  // Someone without a photo is shown as a figure: a man, a woman (with long hair), or just a head
+  // and shoulders when the gender isn't given. Original drawings; style.css colours them.
+  const FIGURE_BODY = '<path class="fg-body" d="M5.5 41c0-9.4 6.5-14.8 14.5-14.8S34.5 31.6 34.5 41z"/>';
+  const FIGURES = {
+    male: '<svg class="figure" viewBox="0 0 40 40" aria-hidden="true">'
+      + `${FIGURE_BODY}<circle class="fg-body" cx="20" cy="16" r="6.9"/>`
+      + '<path class="fg-hair" d="M13 15.6c-.4-5.4 2.9-9 7-9s7.4 3.6 7 9c-1.4-2.6-3.9-3.9-7-3.9s-5.6 1.3-7 3.9z"/></svg>',
+    female: '<svg class="figure" viewBox="0 0 40 40" aria-hidden="true">'
+      + '<path class="fg-hair" d="M12.3 17.4c-.7-6.6 3-11.2 7.7-11.2s8.4 4.6 7.7 11.2c-.3 3.3.7 6.2 2 8.6H10.3c1.3-2.4 2.3-5.3 2-8.6z"/>'
+      + `${FIGURE_BODY}<circle class="fg-body" cx="20" cy="16.6" r="6.3"/>`
+      + '<path class="fg-hair" d="M13.7 16.2c.3-4.8 2.9-7.6 6.3-7.6s6 2.8 6.3 7.6c-1.2-1.9-2.9-3.3-5.2-3.7-.5 1.3-1.6 2.2-3 2.6-1.7.5-3.3.5-4.4 1.1z"/></svg>',
+    unknown: `<svg class="figure" viewBox="0 0 40 40" aria-hidden="true">${FIGURE_BODY}<circle class="fg-body" cx="20" cy="16" r="6.9"/></svg>`,
+  };
+  const figure = (p) => FIGURES[p.gender] || FIGURES.unknown;
 
   function normGender(v) {
     const g = str(v).toLowerCase();
@@ -139,7 +152,7 @@
     let src = p.photo;
     let wait = '';
     const source = photoSource(p);
-    if (source) {                        // show the initials until the photo arrives
+    if (source) {                        // show the figure until the photo arrives
       src = photos.get(source.key);
       if (typeof src !== 'string') {
         src = '';
@@ -147,7 +160,7 @@
       }
     }
     const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async">` : '';
-    return `<span class="avatar ${size} g-${p.gender || 'unknown'}${cc(p.id)}"${wait} aria-hidden="true"><span>${esc(initials(p))}</span>${img}</span>`;
+    return `<span class="avatar ${size} g-${p.gender || 'unknown'}${cc(p.id)}"${wait} aria-hidden="true">${figure(p)}${img}</span>`;
   }
 
   function loadPhoto(source) {
@@ -161,7 +174,7 @@
           el.insertAdjacentHTML('beforeend', `<img src="${url}" alt="">`);
         });
       } catch {
-        photos.set(source.key, null); // keep the initials
+        photos.set(source.key, null); // keep the figure
       }
     })());
   }
@@ -1210,7 +1223,7 @@
     if (id && id !== state.selected) focusPerson(id);
   });
 
-  // Missing photo: drop the <img> so the initials underneath show.
+  // Missing photo: drop the <img> so the figure underneath shows.
   document.addEventListener('error', (e) => {
     const t = e.target;
     if (t instanceof HTMLImageElement && t.parentElement && t.parentElement.classList.contains('avatar')) t.remove();
