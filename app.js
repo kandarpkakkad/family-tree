@@ -626,7 +626,7 @@
 
   // Each couple gets its own colour, shared by both cards, their ring and the lines to their
   // children. The colour comes from the couple's ids, so it stays put when others are added;
-  // it only shifts if it would match the couple beside them or their parents.
+  // it only shifts if it would look like the couple beside them or their parents.
   const PALETTE = 10;
   const coupleOf = new Map();       // person id -> palette slot of their couple
   const unitOf = new Map();         // person id -> the id their branch folds under
@@ -653,7 +653,11 @@
       if (u.members.length > 1) {
         const gen = Math.round(u.d / level);
         colour = hashStr(u.members.map((m) => m.id).sort().join('|')) % PALETTE;
-        for (let t = 0; t < PALETTE && (colour === lastColour.get(gen) || colour === parentColour); t++) colour = (colour + 1) % PALETTE;
+        // The palette runs round the colour wheel, so neighbouring slots look alike: keep clear of
+        // the parents' colour and the couple drawn before in this generation, and of the slots
+        // either side of them.
+        const near = (a, b) => b != null && [0, 1, PALETTE - 1].includes((a - b + PALETTE) % PALETTE);
+        for (let t = 0; t < PALETTE && (near(colour, lastColour.get(gen)) || near(colour, parentColour)); t++) colour = (colour + 1) % PALETTE;
         lastColour.set(gen, colour);
         u.members.forEach((m) => { if (!coupleOf.has(m.id)) coupleOf.set(m.id, colour); });
       }
@@ -810,7 +814,7 @@
     actions.push(`<button class="btn" type="button" data-act="copy">${ICON_LINK}<span>Copy link</span></button>`);
 
     const life = years(p);
-    return `<div class="p-head">${avatar(p, 'xl')}<h2 id="panelTitle">${esc(p.name)}</h2>`
+    return `<div class="p-head${cc(p.id)}">${avatar(p, 'xl')}<h2 id="panelTitle">${esc(p.name)}</h2>`
       + (p.nickname ? `<p class="aka">“${esc(p.nickname)}”</p>` : '')
       + (life ? `<p class="life">${esc(life)}</p>` : '') + '</div>'
       + (facts.length ? `<dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : '')
