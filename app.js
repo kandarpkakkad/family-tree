@@ -1384,7 +1384,7 @@
         ? [f.father, f.mother].filter(Boolean) : null;
       const problem = checkForm(f);
       if (problem) return formError(form, problem);
-      if (editor.on) saveEdit(kind, targetId, f, picked, form);
+      if (editor.on) saveEdit(kind, targetId, f, picked, form, suggestion);
       else sendSuggestion(kind, targetId, f, picked, form);
     });
     if (focus === 'parents') {
@@ -1478,10 +1478,33 @@
       const ids = Array.isArray(s.parents) ? s.parents.filter((x) => typeof x === 'string' && x) : null;
       if (s.kind === 'details' && ids && ids.length <= 2) s.parents = ids; else delete s.parents;
       s.from = clip(str(s.from), 60);
+      s.token = h.person.slice(1);
       return s;
     } catch {
       return null;
     }
+  }
+
+  // A suggestion link's fingerprint. Saving from a link adds it to used_links in family.yaml,
+  // and a used link no longer opens its form.
+  async function linkKey(token) {
+    const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)));
+    return Array.from(hash.slice(0, 6), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Is the suggested change already in the tree (made by hand, or from another link)?
+  function alreadyDone(s) {
+    const p = person(s.target);
+    const same = (a, b) => fold(str(a)) === fold(str(b));
+    if (s.kind === 'details') {
+      const now = currentFields(p);
+      const changes = Object.entries(s.fields);
+      if (!changes.length && !s.parents) return false; // only a photo: nothing to compare
+      return changes.every(([k, v]) => (k === 'deceased' ? Boolean(v) === Boolean(now[k]) : same(v, now[k])))
+        && (!s.parents || (s.parents.length === p.parents.length && s.parents.every((x) => p.parents.includes(x))));
+    }
+    const near = s.kind === 'child' ? p.children : s.kind === 'spouse' ? p.spouses : p.parents;
+    return Boolean(s.fields.name) && near.some((id) => same(person(id).name, s.fields.name));
   }
 
   function suggestionText(s) {
@@ -1564,12 +1587,17 @@
     handleSuggestion();
   }
 
-  function handleSuggestion() {
+  async function handleSuggestion() {
     const s = pendingSuggestion;
     pendingSuggestion = null;
     if (!s) return;
-    if (!editor.on) return toast(`This link is a suggested change for ${keeperName()} to check.`);
     if (!people.has(s.target)) return toast('That suggestion is about someone who isn’t in the tree any more.');
+    try { s.key = await linkKey(s.token); } catch { s.key = ''; }
+    if ((s.key && toList(meta.used_links).includes(s.key)) || alreadyDone(s)) {
+      focusPerson(s.target, false);
+      return toast('This change has already been made, so the link has expired.', 8000);
+    }
+    if (!editor.on) return toast(`This link is a suggested change for ${keeperName()} to check.`);
     focusPerson(s.target, false);
     openForm(s.kind, s.target, s);
   }
@@ -1628,7 +1656,7 @@
     });
   }
 
-  async function saveEdit(kind, targetId, f, photo, form) {
+  async function saveEdit(kind, targetId, f, photo, form, suggestion = null) {
     const button = form.querySelector('[type="submit"]');
     button.disabled = true;
     button.textContent = 'Saving…';
@@ -1671,8 +1699,12 @@
         const next = f.gender === 'male' ? [id, ...parents] : [...parents, id]; // father first
         return store.applyChanges(text, [{ add: fresh, after: targetId }, { replace: targetId, person: { ...target, parents: next } }]);
       };
+      // Saved from a suggestion link: note the link in the same save, so it expires.
+      const key = suggestion && suggestion.key;
+      const save = key ? (text) => store.markLinkUsed(update(text), key) : update;
       const what = kind === 'details' ? `Update ${f.name}` : `Add ${f.name}, ${RELATION[kind]} of ${person(targetId).name}`;
-      const result = await editor.repo.commit(`${what}\n\nSaved from the family tree website.`, update, files);
+      const from = key ? ` From ${suggestion.from || 'a relative'}'s suggestion; that link has now expired.` : '';
+      const result = await editor.repo.commit(`${what}\n\nSaved from the family tree website.${from}`, save, files);
       editor.text = result.text;
       if (photo) photos.set(`repo:${photoPath}`, URL.createObjectURL(photo));
       reload(editor.yaml.load(result.text), id);

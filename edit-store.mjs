@@ -127,6 +127,34 @@ export function applyChanges(text, changes) {
   return current;
 }
 
+// Notes a suggestion link as used (key: its fingerprint from app.js), so it stops opening the form.
+// The keys live on one "used_links: [...]" line at the end of the file.
+export function markLinkUsed(text, key) {
+  const before = load(text) || {};
+  const used = (Array.isArray(before.used_links) ? before.used_links : before.used_links ? [before.used_links] : []).map(str);
+  if (used.includes(key)) return text;
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  const line = `used_links: [${[...used, key].join(', ')}]`;
+  const at = lines.findIndex((l) => /^used_links\s*:/.test(l));
+  if (at === -1) {
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    lines.push('', '# Suggestion links already used (the website adds these, so a used link no longer opens).', line, '');
+  } else {
+    let end = at + 1; // a list written on several lines continues with indented lines
+    while (end < lines.length && (/^\s+\S/.test(lines[end]) || /^\s*-\s/.test(lines[end]))) end++;
+    lines.splice(at, end - at, line);
+  }
+  const out = lines.join(eol);
+  // Read it back: the link is listed and nothing else has changed.
+  const after = load(out) || {};
+  const rest = (o) => JSON.stringify({ ...o, used_links: undefined });
+  if (!Array.isArray(after.used_links) || !after.used_links.map(str).includes(key) || rest(after) !== rest(before)) {
+    throw new Error('Couldn\'t note the suggestion link as used, so nothing was saved.');
+  }
+  return out;
+}
+
 /* ---------------------------------------------------------------- GitHub */
 
 function bytesToB64(bytes) {
