@@ -266,7 +266,7 @@
     document.body.classList.add('locked');
     ui.status.innerHTML = `
       <form class="box lock" id="lock" autocomplete="off">
-        <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" class="mark-bg"/><path class="mark-line" d="M20 15v6M11 27v-6h18v6"/><circle class="mark-dot" cx="20" cy="11" r="4"/><circle class="mark-dot" cx="11" cy="29" r="4"/><circle class="mark-dot" cx="29" cy="29" r="4"/></svg>
+        <svg class="mark" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" class="mark-bg"/><circle class="mark-ring" cx="20" cy="20" r="19.2" fill="none"/><path class="mark-line" d="M20 15v6M11 27v-6h18v6"/><circle class="mark-dot" cx="20" cy="11" r="4"/><circle class="mark-dot" cx="11" cy="29" r="4"/><circle class="mark-dot" cx="29" cy="29" r="4"/></svg>
         <h2>A private family tree</h2>
         <p>Open the link a family member sent you, or type the family code.</p>
         <div class="lock-row">
