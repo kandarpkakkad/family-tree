@@ -181,6 +181,90 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
   :root[data-bg="frame"] body::after { inset: calc(var(--header-h) + 3.5px) 3.5px 3.5px; }
 }
 
+/* ---------- The wedding-invitation look (the default; ?bg=paper for plain paper) ----------
+   Burgundy silk with a faint gold petal pattern, and the tree on an ivory card-stock page inside
+   the invitation's Pichhwai peacock border (pichhwai.js). The tree's layer still covers the
+   whole screen, so zooming and dragging work as before; it is only seen through the page. */
+
+.page-frame { display: none; }
+.page-frame .pw-frame { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+:root[data-bg="invite"] {
+  --page-side: 14px;          /* silk showing either side of the page and below it */
+  --pw-band: 26px;            /* the border's width */
+  --canvas-inset: 40;         /* the two together, in px: the tree is fitted inside them (app.js) */
+  --silk-1: #6e1736;
+  --silk-2: #250512;
+  --silk-ink: #f8f0dc;
+  --silk-soft: rgba(248, 240, 220, .74);
+  --silk-gold: #d9b466;
+  --silk-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23dcb867' stroke-opacity='.09' stroke-width='.8'%3E%3Cpath d='M32 5c6 8 6 15 0 22c-6-7-6-14 0-22zM32 59c6-8 6-15 0-22c-6 7-6 14 0 22zM5 32c8-6 15-6 22 0c-7 6-14 6-22 0zM59 32c-8-6-15-6-22 0c7 6 14 6 22 0z'/%3E%3Ccircle cx='32' cy='32' r='3'/%3E%3Cpath d='M0 0l9 9M64 0l-9 9M0 64l9-9M64 64l-9-9'/%3E%3C/g%3E%3C/svg%3E");
+  --ivory-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .38 0 0 0 0 .28 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* ivory pages with burgundy ink and gold, as on the invitation */
+  --bg: #fffaf1;
+  --surface: #fffdf8;
+  --ink: #4f0f2a;
+  --muted: #87596a;
+  --rule: #efe1c8;
+  --rule-strong: #e2cfac;
+  --card-border: #ead9b9;
+  --line: #cdb27c;
+  --gold: #a98536;
+  --gold-soft: rgba(169, 133, 54, .22);
+  --accent: #8a1c40;
+  --btn-bg: #6e1736;
+  --btn-ink: #fff8ea;
+  --avatar-bg: #f7ecd9;
+  --other: #c4a978;
+  --hover: #f8eedc;
+}
+:root[data-bg="invite"] body {
+  background:
+    var(--silk-pattern) 0 0 / 64px 64px,
+    radial-gradient(130% 80% at 50% 30%, var(--silk-1) 0%, var(--silk-2) 80%);
+  background-attachment: fixed;
+}
+/* the ivory page: fine grain and a warm glow, like the invitation's pages */
+:root[data-bg="invite"] body::after {
+  content: ""; position: fixed; z-index: 0; pointer-events: none;
+  inset: var(--header-h) var(--page-side) var(--page-side);
+  background:
+    var(--ivory-grain),
+    radial-gradient(110% 55% at 50% 0%, rgba(255, 205, 150, .3), transparent 70%),
+    radial-gradient(90% 40% at 50% 100%, rgba(230, 160, 120, .14), transparent 70%),
+    var(--bg);
+  box-shadow: 0 0 80px rgba(0, 0, 0, .45);
+}
+:root[data-bg="invite"] .viewport { z-index: 1; clip-path: inset(var(--header-h) var(--page-side) var(--page-side)); }
+:root[data-bg="invite"] .page-frame { display: block; position: fixed; z-index: 2; inset: var(--header-h) var(--page-side) var(--page-side); pointer-events: none; }
+
+/* the header sits on the silk */
+:root[data-bg="invite"] .topbar { background: none; border-bottom: 0; -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--silk-ink); }
+:root[data-bg="invite"] .brand h1 { color: var(--silk-ink); }
+:root[data-bg="invite"] .brand p { color: var(--silk-soft); }
+:root[data-bg="invite"] .topbar .mark-ring, :root[data-bg="invite"] .topbar .mark-line { stroke: var(--silk-gold); }
+:root[data-bg="invite"] .topbar .mark-dot { fill: var(--silk-gold); }
+:root[data-bg="invite"] .search input, :root[data-bg="invite"] .home { border-color: rgba(217, 180, 102, .5); background: rgba(255, 250, 241, .96); color: var(--ink); }
+:root[data-bg="invite"] .results { color: var(--ink); }
+:root[data-bg="invite"] .search input:focus { border-color: var(--silk-gold); box-shadow: 0 0 0 3px rgba(217, 180, 102, .3); }
+
+/* controls sit inside the border */
+:root[data-bg="invite"] .zoom { right: calc(var(--page-side) + var(--pw-band) + 12px); bottom: calc(var(--page-side) + var(--pw-band) + 12px); }
+@media (min-width: 641px) {
+  :root[data-bg="invite"] .panel {
+    top: calc(var(--header-h) + var(--pw-band) + 10px);
+    right: calc(var(--page-side) + var(--pw-band) + 10px);
+    bottom: calc(var(--page-side) + var(--pw-band) + 10px);
+  }
+  :root[data-bg="invite"] body.panel-open .zoom { right: calc(var(--page-side) + var(--pw-band) + 10px + 388px + 12px); }
+}
+:root[data-bg="invite"] .editbar { left: calc(var(--page-side) + var(--pw-band) + 12px); bottom: calc(var(--page-side) + var(--pw-band) + 12px); }
+
+@media (max-width: 640px) {
+  :root[data-bg="invite"] { --page-side: 6px; --pw-band: 18px; --canvas-inset: 24; }
+}
+
 /* Small capitals used for labels throughout */
 .facts dt, .rel h3, .edit-box h3, .brand p {
   font-family: var(--sans); font-weight: 500; text-transform: uppercase; letter-spacing: .16em;
