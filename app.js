@@ -937,15 +937,13 @@
 
   function visibleRect() {
     const vw = ui.viewport.clientWidth, vh = ui.viewport.clientHeight;
-    // How far the page's frame reaches in from the edges (the invitation look), in px
-    const inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-inset')) || 0;
-    let right = vw - inset, bottom = vh - inset;
+    let right = vw, bottom = vh;
     if (ui.panel.classList.contains('open')) {
-      if (narrow.matches) bottom = Math.min(bottom, vh - ui.panel.offsetHeight);
-      else right = Math.min(right, ui.panel.offsetLeft - 24); // offsetLeft ignores the slide-in transform
+      if (narrow.matches) bottom -= ui.panel.offsetHeight;
+      else right = ui.panel.offsetLeft - 24; // offsetLeft ignores the slide-in transform
     }
-    const left = inset, top = ui.topbar.offsetHeight + inset;
-    return { left, top, right, bottom, w: right - left, h: bottom - top, cx: (left + right) / 2, cy: (top + bottom) / 2 };
+    const top = ui.topbar.offsetHeight;
+    return { left: 0, top, right, bottom, w: right, h: bottom - top, cx: right / 2, cy: (top + bottom) / 2 };
   }
 
   function apply() {
@@ -1219,7 +1217,7 @@
   }, true);
 
   const setHeaderHeight = () => document.documentElement.style.setProperty('--header-h', `${ui.topbar.offsetHeight}px`);
-  // A frame later, so the page border (which is sized from it) resizes outside this observer's turn
+  // A frame later, so the page (which is sized from it) resizes outside this observer's turn
   new ResizeObserver(() => requestAnimationFrame(setHeaderHeight)).observe(ui.topbar);
   setHeaderHeight();
 
