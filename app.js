@@ -22,7 +22,7 @@
   const $ = (id) => document.getElementById(id);
   const ui = {
     topbar: $('topbar'), title: $('title'), subtitle: $('subtitle'),
-    line: $('line'), lineWrap: $('lineWrap'), search: $('search'), results: $('results'),
+    home: $('home'), search: $('search'), results: $('results'),
     notice: $('notice'), viewport: $('viewport'), world: $('world'), links: $('links'), cards: $('cards'),
     status: $('status'), panel: $('panel'), panelBody: $('panelBody'), panelClose: $('panelClose'),
     zoomIn: $('zoomIn'), zoomOut: $('zoomOut'), zoomFit: $('zoomFit'), layout: $('layout'),
@@ -34,7 +34,7 @@
   const state = { root: null, selected: null, collapsed: new Set(), across: true };
   const view = { x: 0, y: 0, k: 1 };
   const narrow = window.matchMedia('(max-width: 640px)');
-  let lines = [];                 // family lines offered in the drop-down
+  let lines = [];                 // top-of-tree couples: the family, plus any in-laws' families
   let tree = null;
   let bounds = { w: 0, h: 0 };
   let code = '';                  // the access code that opened the tree (kept in links)
@@ -296,7 +296,7 @@
     ui.status.hidden = false;
   }
 
-  // Reads the family into the index, header and drop-down. Used on opening and after each save.
+  // Reads the family into the index and header. Used on opening and after each save.
   function ingest(data) {
     const list = Array.isArray(data) ? data : data && data.people;
     if (!Array.isArray(list)) { fail('No people list found', '<code>family.yaml</code> needs a <code>people:</code> list.'); return false; }
@@ -312,8 +312,6 @@
     ui.subtitle.textContent = [str(meta.subtitle), `${people.size} ${people.size === 1 ? 'person' : 'people'}`, plural(generations(), 'generation')]
       .filter(Boolean).join(' · ');
     lines = findLines();
-    ui.line.innerHTML = lines.map((l) => `<option value="${esc(l.id)}">${esc(l.label)}</option>`).join('');
-    ui.lineWrap.hidden = lines.length < 2;
     showProblems(problems);
     return true;
   }
@@ -692,7 +690,7 @@
     ui.links.innerHTML = paths.join('') + rings.join('');
     ui.cards.innerHTML = cards.join('') + extras.join('');
     bounds = { w, h };
-    syncLineSelect();
+    syncHome();
   }
 
   function cardHTML(p, x, y, ghost) {
@@ -706,22 +704,11 @@
       + `${avatar(p)}<span class="meta"><span class="name">${esc(p.name)}</span>${yrs ? `<span class="years">${esc(yrs)}</span>` : ''}</span></div>`;
   }
 
-  function syncLineSelect() {
-    if (ui.lineWrap.hidden) return;
-    let custom = ui.line.querySelector('option[data-custom]');
-    if (lines.some((l) => l.id === state.root)) {
-      if (custom) custom.remove();
-      ui.line.value = state.root;
-      return;
-    }
-    if (!custom) {
-      custom = document.createElement('option');
-      custom.dataset.custom = '';
-      ui.line.append(custom);
-    }
-    custom.value = state.root;
-    custom.textContent = `${person(state.root).name}’s branch`;
-    ui.line.value = state.root;
+  // The tree is one family. Following a married-in person's arrow shows their parents' side;
+  // this button (named after the family) brings you back.
+  function syncHome() {
+    ui.home.hidden = state.root === defaultRoot();
+    ui.home.innerHTML = `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg><span>${esc(str(meta.title) || 'Family Tree')}</span>`;
   }
 
   function showProblems(list) {
@@ -1132,11 +1119,11 @@
     else fit(false, true);
   });
 
-  ui.line.addEventListener('change', () => {
-    state.root = ui.line.value;
+  ui.home.addEventListener('click', () => {
+    state.root = defaultRoot();
     render();
-    if (state.selected && !placed.has(state.selected)) closePanel();
-    fit(true, true);
+    if (state.selected && placed.has(state.selected)) centerOn(state.selected);
+    else { closePanel(); fit(true, true); }
   });
 
   document.addEventListener('keydown', (e) => {
