@@ -119,6 +119,68 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 [hidden] { display: none !important; }
 
+/* ---------- Other backgrounds to compare: ?bg=linen, ?bg=frame, ?bg=damask or ?bg=wash before the # ---------- */
+
+:root {
+  --linen-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .38 0 0 0 0 .3 0 0 0 0 .18 .15 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+  --linen-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8 .012' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .38 0 0 0 0 .3 0 0 0 0 .18 .13 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+  --damask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='144' viewBox='0 0 96 144'%3E%3Cg fill='none' stroke='%23a8864f' stroke-opacity='.22' stroke-width='1'%3E%3Cpath d='M48 0C56 22 96 36 96 72C96 108 56 122 48 144M48 0C40 22 0 36 0 72C0 108 40 122 48 144'/%3E%3Cpath d='M48 61q6 11 0 22q-6-11 0-22zM37 72q11-6 22 0q-11 6-22 0z'/%3E%3Ccircle cx='48' cy='72' r='1.6'/%3E%3Ccircle cx='48' cy='0' r='2.4'/%3E%3Ccircle cx='48' cy='144' r='2.4'/%3E%3Ccircle cx='0' cy='72' r='2.4'/%3E%3Ccircle cx='96' cy='72' r='2.4'/%3E%3C/g%3E%3C/svg%3E");
+  --diamond: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13'%3E%3Cpath d='M6.5 0 13 6.5 6.5 13 0 6.5z' fill='%23a8864f'/%3E%3Cpath d='M6.5 3.6 9.4 6.5 6.5 9.4 3.6 6.5z' fill='%23f6f3ee'/%3E%3C/svg%3E");
+  --wash-1: #fffdf9; --wash-2: #f4eee3; --wash-3: #e6dccb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --linen-h: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .95 0 0 0 0 .88 .07 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+    --linen-v: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8 .012' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .95 0 0 0 0 .88 .06 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+    --damask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='144' viewBox='0 0 96 144'%3E%3Cg fill='none' stroke='%23c9aa6e' stroke-opacity='.12' stroke-width='1'%3E%3Cpath d='M48 0C56 22 96 36 96 72C96 108 56 122 48 144M48 0C40 22 0 36 0 72C0 108 40 122 48 144'/%3E%3Cpath d='M48 61q6 11 0 22q-6-11 0-22zM37 72q11-6 22 0q-11 6-22 0z'/%3E%3Ccircle cx='48' cy='72' r='1.6'/%3E%3Ccircle cx='48' cy='0' r='2.4'/%3E%3Ccircle cx='48' cy='144' r='2.4'/%3E%3Ccircle cx='0' cy='72' r='2.4'/%3E%3Ccircle cx='96' cy='72' r='2.4'/%3E%3C/g%3E%3C/svg%3E");
+    --diamond: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13'%3E%3Cpath d='M6.5 0 13 6.5 6.5 13 0 6.5z' fill='%23c9aa6e'/%3E%3Cpath d='M6.5 3.6 9.4 6.5 6.5 9.4 3.6 6.5z' fill='%23121110'/%3E%3C/svg%3E");
+    --wash-1: #26231f; --wash-2: #171614; --wash-3: #0c0b0a;
+  }
+}
+
+/* Linen: fine woven threads */
+:root[data-bg="linen"] body {
+  background:
+    var(--linen-h), var(--linen-v),
+    radial-gradient(70% 60% at 50% 42%, var(--paper-light) 0%, transparent 100%),
+    radial-gradient(130% 110% at 50% 45%, transparent 55%, var(--paper-edge) 100%),
+    var(--bg);
+  background-attachment: fixed;
+}
+/* Damask: a faint tone-on-tone wallpaper pattern */
+:root[data-bg="damask"] body {
+  background:
+    var(--damask) center top / 96px 144px,
+    var(--grain),
+    radial-gradient(70% 60% at 50% 42%, var(--paper-light) 0%, transparent 100%),
+    radial-gradient(130% 110% at 50% 45%, transparent 55%, var(--paper-edge) 100%),
+    var(--bg);
+  background-attachment: fixed;
+}
+/* Wash: smooth, light at the top and deepening towards the edges */
+:root[data-bg="wash"] body {
+  background: radial-gradient(130% 95% at 50% 0%, var(--wash-1) 0%, var(--wash-2) 55%, var(--wash-3) 100%);
+  background-attachment: fixed;
+}
+/* Frame: the paper inside a fine double gold rule with a small diamond at each corner */
+:root[data-bg="frame"] .viewport { z-index: 1; }
+:root[data-bg="frame"] body::before, :root[data-bg="frame"] body::after { content: ""; position: fixed; z-index: 0; pointer-events: none; }
+:root[data-bg="frame"] body::before {
+  inset: calc(var(--header-h) + 18px) 18px 18px;
+  border: 1px solid color-mix(in srgb, var(--gold) 65%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--gold) 35%, transparent); outline-offset: -6px;
+}
+:root[data-bg="frame"] body::after {
+  inset: calc(var(--header-h) + 11.5px) 11.5px 11.5px;
+  background:
+    var(--diamond) 0 0 / 13px 13px no-repeat, var(--diamond) 100% 0 / 13px 13px no-repeat,
+    var(--diamond) 0 100% / 13px 13px no-repeat, var(--diamond) 100% 100% / 13px 13px no-repeat;
+}
+@media (max-width: 640px) {
+  :root[data-bg="frame"] body::before { inset: calc(var(--header-h) + 10px) 10px 10px; }
+  :root[data-bg="frame"] body::after { inset: calc(var(--header-h) + 3.5px) 3.5px 3.5px; }
+}
+
 /* Small capitals used for labels throughout */
 .facts dt, .rel h3, .edit-box h3, .brand p {
   font-family: var(--sans); font-weight: 500; text-transform: uppercase; letter-spacing: .16em;
