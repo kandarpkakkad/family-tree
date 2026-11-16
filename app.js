@@ -17,7 +17,9 @@
   const MAX_K = 2.5;
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const ICON_UP = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3.5M3.8 7.5 8 3.3l4.2 4.2"/></svg>';
-  const ICON_LINK = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 11.5a3.5 3.5 0 0 0 5 0l2.5-2.5a3.5 3.5 0 0 0-5-5L10 5M11.5 8.5a3.5 3.5 0 0 0-5 0L4 11a3.5 3.5 0 0 0 5 5l1-1"/></svg>';
+  const ICON_FOLD = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.5l4 4 4-4M6 16.5l4-4 4 4"/></svg>';
+  const ICON_UNFOLD = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 7.5l4-4 4 4M6 12.5l4 4 4-4"/></svg>';
+  const ICON_LINK ='<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 11.5a3.5 3.5 0 0 0 5 0l2.5-2.5a3.5 3.5 0 0 0-5-5L10 5M11.5 8.5a3.5 3.5 0 0 0-5 0L4 11a3.5 3.5 0 0 0 5 5l1-1"/></svg>';
 
   const $ = (id) => document.getElementById(id);
   const ui = {
@@ -25,7 +27,7 @@
     home: $('home'), search: $('search'), results: $('results'),
     notice: $('notice'), viewport: $('viewport'), world: $('world'), links: $('links'), cards: $('cards'),
     status: $('status'), panel: $('panel'), panelBody: $('panelBody'), panelClose: $('panelClose'),
-    zoomIn: $('zoomIn'), zoomOut: $('zoomOut'), zoomFit: $('zoomFit'), layout: $('layout'),
+    zoomIn: $('zoomIn'), zoomOut: $('zoomOut'), zoomFit: $('zoomFit'), layout: $('layout'), foldAll: $('foldAll'),
     editbar: $('editbar'), signOut: $('signOut'), toast: $('toast'),
   };
 
@@ -145,7 +147,7 @@
       }
     }
     const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async">` : '';
-    return `<span class="avatar ${size} g-${p.gender || 'unknown'}"${wait} aria-hidden="true"><span>${esc(initials(p))}</span>${img}</span>`;
+    return `<span class="avatar ${size} g-${p.gender || 'unknown'}${cc(p.id)}"${wait} aria-hidden="true"><span>${esc(initials(p))}</span>${img}</span>`;
   }
 
   function loadPhoto(source) {
@@ -618,17 +620,42 @@
 
   /* ---------- Drawing ---------- */
 
+  // Each couple gets its own colour, shared by both cards, their ring and the lines to their
+  // children. The colour comes from the couple's ids, so it stays put when others are added;
+  // it only shifts if it would match the couple beside them or their parents.
+  const PALETTE = 10;
+  const coupleOf = new Map();       // person id -> palette slot of their couple
+  const unitOf = new Map();         // person id -> the id their branch folds under
+  const hashStr = (s) => { let h = 2166136261; for (const ch of s) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const cc = (id) => (coupleOf.has(id) ? ` cc-${coupleOf.get(id)}` : '');
+  let foldedNow = 0;
+
   function render() {
     setGeometry();
     tree = buildTree(state.root);
     shape(tree);
     place(tree, -Math.min(...tree.outline.map(([lo]) => lo)), 0);
     placed.clear();
+    coupleOf.clear();
+    unitOf.clear();
+    foldedNow = 0;
+    const lastColour = new Map();   // generation -> colour of the last couple drawn there
     const cards = [], extras = [], paths = [], rings = [];
     const { cb, cd, level } = geo;
     let w = 0, h = 0;
 
-    const draw = (u, isRoot) => {
+    const draw = (u, isRoot, parentColour) => {
+      let colour = null;
+      if (u.members.length > 1) {
+        const gen = Math.round(u.d / level);
+        colour = hashStr(u.members.map((m) => m.id).sort().join('|')) % PALETTE;
+        for (let t = 0; t < PALETTE && (colour === lastColour.get(gen) || colour === parentColour); t++) colour = (colour + 1) % PALETTE;
+        lastColour.set(gen, colour);
+        u.members.forEach((m) => { if (!coupleOf.has(m.id)) coupleOf.set(m.id, colour); });
+      }
+      u.members.forEach((m) => { if (!m.ghost && !unitOf.has(m.id)) unitOf.set(m.id, u.id); });
+      if (u.collapsed) foldedNow++;
+      const tint = colour === null ? '' : ` cc-${colour}`;
       const pi = indexOf(u, u.id);
       const mid = u.d + cd / 2;                     // halfway through the cards, along depth
       const centre = (i) => slot(u, i) + cb / 2;
@@ -649,10 +676,10 @@
         if (b - a === 1) {
           const b1 = slot(u, a) + cb, b2 = slot(u, b);
           const ring = xy((b1 + b2) / 2, mid);
-          paths.push(`<path class="marriage" d="M${pt(b1, mid)}L${pt(b2, mid)}"/>`);
-          rings.push(`<circle class="ring" cx="${ring.x}" cy="${ring.y}" r="4"/>`);
+          paths.push(`<path class="marriage${tint}" d="M${pt(b1, mid)}L${pt(b2, mid)}"/>`);
+          rings.push(`<circle class="ring${tint}" cx="${ring.x}" cy="${ring.y}" r="4.5"/>`);
         } else {
-          paths.push(`<path class="marriage" d="M${pt(centre(a), u.d)}L${pt(centre(a), u.d - 18)}L${pt(centre(b), u.d - 18)}L${pt(centre(b), u.d)}"/>`);
+          paths.push(`<path class="marriage${tint}" d="M${pt(centre(a), u.d)}L${pt(centre(a), u.d - 18)}L${pt(centre(b), u.d - 18)}L${pt(centre(b), u.d)}"/>`);
         }
       });
 
@@ -668,22 +695,25 @@
       u.groups.forEach((g, gi) => {
         const [ob, od] = origin(g.spouse);
         const bar = u.d + cd + (level - cd) / 2 + (gi - (n - 1) / 2) * 10;
-        g.kids.forEach((k) => paths.push(`<path d="${elbow(ob, od, anchor(k), k.d, bar)}"/>`));
+        g.kids.forEach((k) => paths.push(`<path class="kid${tint}" d="${elbow(ob, od, anchor(k), k.d, bar)}"/>`));
       });
 
       if (u.total && !u.ghost) {
         const [tb, td] = origin(u.members.length === 2 ? u.members[1 - pi].id : null);
         const tAt = u.d + cd + 17;
         const hidden = u.collapsed ? descendants(u.id) : 0;
-        if (u.collapsed) paths.push(`<path d="M${pt(tb, td)}L${pt(tb, tAt)}"/>`);
+        if (u.collapsed) paths.push(`<path class="kid${tint}" d="M${pt(tb, td)}L${pt(tb, tAt)}"/>`);
         const at = xy(tb, tAt);
         const title = u.collapsed ? `Show ${plural(hidden, 'descendant')}` : `Hide ${firstName(person(u.id))}’s descendants`;
         extras.push(`<button class="toggle${u.collapsed ? ' collapsed' : ''}" type="button" data-toggle="${esc(u.id)}" style="left:${at.x}px;top:${at.y}px" aria-expanded="${!u.collapsed}" title="${esc(title)}" aria-label="${esc(title)}">${u.collapsed ? `+${hidden}` : '−'}</button>`);
       }
-      kidsOf(u).forEach((k) => draw(k, false));
+      kidsOf(u).forEach((k) => draw(k, false, colour));
     };
-    draw(tree, true);
+    draw(tree, true, null);
     ui.world.classList.toggle('across', geo.across);
+    ui.foldAll.classList.toggle('folded', foldedNow > 0);
+    ui.foldAll.title = foldedNow ? 'Open every branch' : 'Fold every branch';
+    ui.foldAll.setAttribute('aria-label', ui.foldAll.title);
 
     ui.links.setAttribute('width', w);
     ui.links.setAttribute('height', h);
@@ -696,6 +726,7 @@
   function cardHTML(p, x, y, ghost) {
     const yrs = ghost ? 'Also shown elsewhere' : years(p);
     const cls = ['card', `g-${p.gender}`];
+    if (coupleOf.has(p.id)) cls.push(`cc-${coupleOf.get(p.id)}`);
     if (p.deceased) cls.push('deceased');
     if (ghost) cls.push('ghost');
     else if (p.id === state.selected) cls.push('selected');
@@ -762,6 +793,13 @@
     const actions = [];
     if (canonical(topAncestor(p.id)) !== state.root) {
       actions.push(`<button class="btn primary" type="button" data-act="line">Show ${esc(firstName(p))}’s family line</button>`);
+    }
+    // Fold or open this person's branch (for someone who married in, it's their couple's branch).
+    const branch = unitOf.get(p.id);
+    if (branch && person(branch).children.length) {
+      const n = descendants(branch);
+      const folded = state.collapsed.has(branch);
+      actions.push(`<button class="btn" type="button" data-act="fold">${folded ? ICON_UNFOLD : ICON_FOLD}<span>${folded ? 'Show' : 'Hide'} ${plural(n, 'descendant')}</span></button>`);
     }
     actions.push(`<button class="btn" type="button" data-act="copy">${ICON_LINK}<span>Copy link</span></button>`);
 
@@ -1106,12 +1144,30 @@
     if (!act || !state.selected) return;
     if (act.dataset.act === 'line') showLine(state.selected);
     if (act.dataset.act === 'copy') copyLink(act);
+    if (act.dataset.act === 'fold' && unitOf.has(state.selected)) {
+      toggleBranch(unitOf.get(state.selected));
+      select(state.selected);
+    }
   });
 
   ui.panelClose.addEventListener('click', closePanel);
   ui.zoomIn.addEventListener('click', () => zoomBy(1.3));
   ui.zoomOut.addEventListener('click', () => zoomBy(1 / 1.3));
   ui.zoomFit.addEventListener('click', () => fit(true));
+
+  // Fold every branch down to the first generation (each with its "+N"), or open them all again.
+  ui.foldAll.addEventListener('click', () => {
+    if (foldedNow) {
+      state.collapsed.clear();
+    } else {
+      const top = new Set([state.root, ...person(state.root).spouses]);
+      for (const p of people.values()) if (p.children.length && !top.has(p.id)) state.collapsed.add(p.id);
+    }
+    render();
+    if (state.selected && placed.has(state.selected)) select(state.selected);
+    else closePanel();
+    fit(true, true);
+  });
   ui.layout.addEventListener('click', () => {
     setLayout(!state.across);
     render();

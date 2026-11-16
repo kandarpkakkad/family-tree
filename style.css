@@ -16,10 +16,17 @@
   --accent-soft: rgba(154, 63, 44, .18);
   --on-accent: #fff8ee;
   --gold: #b98a32;
-  --male: #42688f;
-  --male-soft: #e0e8f1;
-  --female: #a24a68;
-  --female-soft: #f4e1e7;
+  /* One colour per couple (cc-0 … cc-9): ink for the stripe, ring and lines; soft for the avatar */
+  --c0: #b4543a; --c0-soft: #f6e1d9;
+  --c1: #2c7a70; --c1-soft: #d8eeea;
+  --c2: #4a59a6; --c2-soft: #e1e4f5;
+  --c3: #737a1f; --c3-soft: #ebedd3;
+  --c4: #8a4785; --c4-soft: #f1dff0;
+  --c5: #a26d14; --c5-soft: #f5e8cd;
+  --c6: #3b7646; --c6-soft: #dcede0;
+  --c7: #ac4560; --c7-soft: #f6dde4;
+  --c8: #40698a; --c8-soft: #dce7f0;
+  --c9: #85573a; --c9-soft: #efe2d7;
   --other: #7d7264;
   --other-soft: #ece6dc;
   --hover: #f3ebdd;
@@ -51,10 +58,16 @@
     --accent-soft: rgba(227, 144, 122, .22);
     --on-accent: #1e1410;
     --gold: #d6aa58;
-    --male: #9dbbe0;
-    --male-soft: #2a3644;
-    --female: #eaa3bb;
-    --female-soft: #43293a;
+    --c0: #eb977f; --c0-soft: #4a2a21;
+    --c1: #6cc2b5; --c1-soft: #1d3a36;
+    --c2: #9eaaee; --c2-soft: #2a2f4e;
+    --c3: #c5cc6c; --c3-soft: #34371b;
+    --c4: #d692d0; --c4-soft: #3f2540;
+    --c5: #e5b25a; --c5-soft: #43331a;
+    --c6: #86c996; --c6-soft: #203a26;
+    --c7: #ec92a8; --c7-soft: #47242e;
+    --c8: #8fbadb; --c8-soft: #223546;
+    --c9: #d6a483; --c9-soft: #3e2c21;
     --other: #bcae9c;
     --other-soft: #352e27;
     --hover: #2f2721;
@@ -159,8 +172,21 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
 
 .links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .links path { fill: none; stroke: var(--line); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.links path.marriage { stroke: var(--gold); stroke-width: 2; }
-.links .ring { fill: var(--bg); stroke: var(--gold); stroke-width: 2; }
+.links path.marriage { stroke: var(--cc, var(--gold)); stroke-width: 2.4; }
+.links .ring { fill: var(--bg); stroke: var(--cc, var(--gold)); stroke-width: 2.4; }
+/* A couple's lines to their children carry the couple's colour, softened */
+.links path.kid { stroke: color-mix(in srgb, var(--cc, var(--line)) 62%, var(--line)); stroke-width: 1.8; }
+
+.cc-0 { --cc: var(--c0); --cc-soft: var(--c0-soft); }
+.cc-1 { --cc: var(--c1); --cc-soft: var(--c1-soft); }
+.cc-2 { --cc: var(--c2); --cc-soft: var(--c2-soft); }
+.cc-3 { --cc: var(--c3); --cc-soft: var(--c3-soft); }
+.cc-4 { --cc: var(--c4); --cc-soft: var(--c4-soft); }
+.cc-5 { --cc: var(--c5); --cc-soft: var(--c5-soft); }
+.cc-6 { --cc: var(--c6); --cc-soft: var(--c6-soft); }
+.cc-7 { --cc: var(--c7); --cc-soft: var(--c7-soft); }
+.cc-8 { --cc: var(--c8); --cc-soft: var(--c8-soft); }
+.cc-9 { --cc: var(--c9); --cc-soft: var(--c9-soft); }
 
 /* ---------- Person cards ---------- */
 
@@ -172,12 +198,12 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
   cursor: pointer; user-select: none; -webkit-user-select: none; outline: none;
   transition: box-shadow .15s, border-color .15s;
 }
+/* The couple's colour: a stripe on the left and a tint in the border (neutral if single) */
 .card::before {
-  content: ""; position: absolute; left: -1px; top: 18px; bottom: 18px; width: 3px;
-  border-radius: 0 3px 3px 0; background: var(--g, var(--other));
+  content: ""; position: absolute; left: -1px; top: 14px; bottom: 14px; width: 4px;
+  border-radius: 0 4px 4px 0; background: var(--cc, var(--other));
 }
-.card.g-male { --g: var(--male); }
-.card.g-female { --g: var(--female); }
+.card[class*="cc-"] { border-color: color-mix(in srgb, var(--cc) 34%, var(--card-border)); }
 .card:hover { border-color: var(--line); box-shadow: var(--shadow-lg); }
 .card:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow); }
 .card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-lg); }
@@ -201,11 +227,8 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
   position: relative; flex: none; width: 44px; height: 44px; border-radius: 50%; overflow: hidden;
   display: grid; place-items: center;
   font: 600 15px/1 var(--sans); letter-spacing: .02em;
-  background: var(--a-bg); color: var(--a-ink);
+  background: var(--cc-soft, var(--other-soft)); color: var(--cc, var(--other));
 }
-.avatar.g-male { --a-bg: var(--male-soft); --a-ink: var(--male); }
-.avatar.g-female { --a-bg: var(--female-soft); --a-ink: var(--female); }
-.avatar.g-unknown { --a-bg: var(--other-soft); --a-ink: var(--other); }
 .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .avatar.sm { width: 32px; height: 32px; font-size: 12px; }
 .avatar.xs { width: 26px; height: 26px; font-size: 10.5px; }
@@ -223,8 +246,8 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
 .up svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .world.across .up svg { transform: rotate(-90deg); } /* sideways, parents are to the left */
 .toggle {
-  height: 20px; min-width: 20px; padding: 0 6px; border-radius: 10px; transform: translate(-50%, -50%);
-  font-size: 11.5px; font-weight: 600; line-height: 1; box-shadow: none;
+  height: 22px; min-width: 22px; padding: 0 7px; border-radius: 11px; transform: translate(-50%, -50%);
+  font-size: 13px; font-weight: 600; line-height: 1; box-shadow: var(--shadow);
 }
 .up:hover, .toggle:hover, .up:focus-visible, .toggle:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
 .toggle.collapsed { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: var(--shadow); }
@@ -245,6 +268,8 @@ code { font: .92em ui-monospace, SFMono-Regular, Consolas, monospace; background
 .zoom #layout circle { fill: currentColor; stroke: none; }
 /* The button shows the layout it switches to. */
 .zoom #layout.across .to-across, .zoom #layout:not(.across) .to-down { display: none; }
+/* Fold every branch / open them again */
+.zoom #foldAll.folded .to-fold, .zoom #foldAll:not(.folded) .to-open { display: none; }
 body.panel-open .zoom { right: 416px; }
 
 /* ---------- Details panel ---------- */
