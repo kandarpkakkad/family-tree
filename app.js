@@ -445,13 +445,17 @@
     return max;
   }
 
-  function descendants(...ids) {
+  function descendantSet(...ids) {
     const seen = new Set();
     const stack = ids.slice();
     while (stack.length) {
       for (const c of person(stack.pop()).children) if (!seen.has(c)) { seen.add(c); stack.push(c); }
     }
-    return seen.size;
+    return seen;
+  }
+
+  function descendants(...ids) {
+    return descendantSet(...ids).size;
   }
 
   // Top-of-tree couples: no parents of their own, and not married into a family that is already listed.
@@ -783,12 +787,14 @@
     else if (ag && !p.deceased) facts.push(['Age', `${ag.exact ? '' : 'About '}${ag.a}`]);
 
     const sibs = siblings(p);
+    // Parents can be changed from here, so that row shows even when nobody is listed yet.
+    const changeParents = canEdit() ? `<button class="rel-edit" type="button" data-edit="parents">${p.parents.length ? 'Change' : 'Choose'}</button>` : '';
     const rel = [
-      ['Parents', p.parents.map((id) => chip(id))],
+      ['Parents', p.parents.map((id) => chip(id)), changeParents],
       [p.spouses.length > 1 ? 'Spouses' : 'Spouse', p.spouses.map((id) => chip(id))],
       [sibs.length === 1 ? 'Sibling' : 'Siblings', sibs.map((s) => chip(s.id, s.half ? 'half' : ''))],
       [p.children.length === 1 ? 'Child' : 'Children', sortKids(p.children).map((id) => chip(id))],
-    ].filter(([, chips]) => chips.length);
+    ].filter(([, chips, extra]) => chips.length || extra);
 
     const actions = [];
     if (canonical(topAncestor(p.id)) !== state.root) {
@@ -809,7 +815,8 @@
       + (life ? `<p class="life">${esc(life)}</p>` : '') + '</div>'
       + (facts.length ? `<dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : '')
       + (p.bio ? `<div class="bio">${p.bio.split(/\n\s*\n/).map((t) => `<p>${esc(t)}</p>`).join('')}</div>` : '')
-      + rel.map(([label, chips]) => `<section class="rel"><h3>${label}</h3><div class="chips">${chips.join('')}</div></section>`).join('')
+      + rel.map(([label, chips, extra]) => `<section class="rel">${extra ? `<div class="rel-head"><h3>${label}</h3>${extra}</div>` : `<h3>${label}</h3>`}`
+        + `<div class="chips">${chips.length ? chips.join('') : '<span class="none">Not on the tree yet</span>'}</div></section>`).join('')
       + editActionsHTML(p)
       + `<div class="actions">${actions.join('')}</div>`;
   }
@@ -1137,7 +1144,9 @@
     const go = e.target.closest('[data-go]');
     if (go) return focusPerson(go.dataset.go);
     const edit = e.target.closest('[data-edit]');
-    if (edit && state.selected) return openForm(edit.dataset.edit, state.selected);
+    if (edit && state.selected) {
+      return edit.dataset.edit === 'parents' ? openForm('details', state.selected, null, 'parents') : openForm(edit.dataset.edit, state.selected);
+    }
     const back = e.target.closest('[data-back]');
     if (back) return people.has(back.dataset.back) ? select(back.dataset.back) : closePanel();
     const act = e.target.closest('[data-act]');
@@ -1231,8 +1240,10 @@
     toast.timer = setTimeout(() => { ui.toast.hidden = true; }, ms);
   }
 
+  const canEdit = () => Boolean(code || editor.on); // the local preview has nobody to send to
+
   function editActionsHTML(p) {
-    if (!code && !editor.on) return ''; // the local preview has nobody to send to
+    if (!canEdit()) return '';
     const parent = p.parents.length < 2 ? '<button class="btn" type="button" data-edit="parent">+ Parent</button>' : '';
     return `<section class="edit-box"><h3>${editor.on ? 'Edit' : 'Something to add or correct?'}</h3><div class="edit-actions">`
       + `<button class="btn" type="button" data-edit="details">${ICON_PEN}<span>${editor.on ? 'Edit details' : 'Correct details'}</span></button>`
@@ -1256,7 +1267,43 @@
     return `Add ${firstName(p)}’s father or mother`;
   }
 
-  function openForm(kind, targetId, suggestion = null) {
+  // A person's parents as father and mother. Someone whose gender isn't set fills a free slot.
+  function parentSlots(ids) {
+    const out = { father: '', mother: '' };
+    const rest = [];
+    for (const id of ids) {
+      const g = person(id).gender;
+      if (g === 'male' && !out.father) out.father = id;
+      else if (g === 'female' && !out.mother) out.mother = id;
+      else rest.push(id);
+    }
+    for (const id of rest) {
+      if (!out.father) out.father = id;
+      else if (!out.mother) out.mother = id;
+    }
+    return out;
+  }
+
+  // Everyone who could be p's father (or mother): not p, nobody descended from p, and not the
+  // other gender. The current choice is always listed.
+  function parentOptions(p, slot, chosen) {
+    const blocked = descendantSet(p.id).add(p.id);
+    const avoid = slot === 'father' ? 'female' : 'male';
+    const list = [...people.values()]
+      .filter((q) => !blocked.has(q.id) && (q.gender !== avoid || q.id === chosen))
+      .sort((a, b) => a.name.localeCompare(b.name) || dateKeyOf(a) - dateKeyOf(b));
+    const named = new Map();
+    for (const q of list) named.set(q.name, (named.get(q.name) || 0) + 1);
+    const label = (q) => {
+      const y = years(q);
+      return q.name + (y ? ` (${y})` : '') + (named.get(q.name) > 1 && !y ? ` · ${q.id}` : '');
+    };
+    return `<option value="">Not on the tree</option>${list.map((q) => `<option value="${esc(q.id)}"${q.id === chosen ? ' selected' : ''}>${esc(label(q))}</option>`).join('')}`;
+  }
+
+  const dateKeyOf = (q) => (parseDate(q.born) ? dateKey(q.born) : 0);
+
+  function openForm(kind, targetId, suggestion = null, focus = '') {
     const p = person(targetId);
     if (!p) return;
     const v = kind === 'details' ? currentFields(p) : {};
@@ -1265,16 +1312,28 @@
     const others = kind === 'child' ? p.spouses.map(person) : [];
     const radio = (g, label) => `<label><input type="radio" name="gender" value="${g}"${v.gender === g ? ' checked' : ''}> ${label}</label>`;
     const photoNow = kind === 'details' && p.photo ? avatar(p, 'lg') : `<span class="avatar lg g-unknown">${ICON_CAMERA}</span>`;
+    const slots = parentSlots(p.parents); // as they are now
+    const chosen = suggestion && suggestion.parents
+      ? parentSlots(suggestion.parents.filter((x) => people.has(x) && x !== p.id))
+      : slots;
+    const parentFields = kind !== 'details' ? '' : `
+        <div class="parent-pick">
+          <label class="field"><span>Father</span><select name="father">${parentOptions(p, 'father', chosen.father)}</select></label>
+          <label class="field"><span>Mother</span><select name="mother">${parentOptions(p, 'mother', chosen.mother)}</select></label>
+          <p class="hint">Only people already on the tree are listed. To add someone new, use <b>+ Parent</b>${p.parents.length >= 2 ? ' (first set one of these to “Not on the tree”)' : ''}.</p>
+        </div>`;
     ui.panelBody.innerHTML = `
       <form class="edit-form" id="editForm" novalidate>
         <h2>${esc(formTitle(kind, p))}</h2>
         ${suggestion ? `<p class="from">Suggested by ${esc(suggestion.from || 'a relative')}. Check it, change anything you like, then save.${suggestion.photo ? ' They sent a photo too: save it from WhatsApp and choose it below.' : ''}</p>` : ''}
+        ${kind === 'parent' && !suggestion ? '<p class="hint">Is the parent already on the tree? Then don’t add them again: go back, press <b>Change</b> next to <b>Parents</b> and choose them.</p>' : ''}
         ${field('name', 'Full name', 'required')}
         ${field('nickname', 'Nickname <small>(optional)</small>')}
         <div class="field"><span>Gender</span><div class="radios" role="radiogroup">${radio('male', 'Male')}${radio('female', 'Female')}</div></div>
         <div class="two">${field('born', 'Born', 'placeholder="1952-08-21 or 1952"')}${field('place', 'Place')}</div>
         <div class="two">${field('died', 'Died', 'placeholder="year or date"')}
           <label class="check"><input type="checkbox" name="deceased"${v.deceased ? ' checked' : ''}> Passed away</label></div>
+        ${parentFields}
         ${others.length ? `<label class="field"><span>Other parent</span><select name="other">${others.map((o) => `<option value="${esc(o.id)}"${suggestion && suggestion.other === o.id ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}<option value="">Not listed</option></select></label>` : ''}
         <label class="field"><span>About them <small>(optional)</small></span><textarea name="bio" rows="4">${esc(v.bio || '')}</textarea></label>
         <div class="photo-pick"><span class="photo-now">${photoNow}</span>
@@ -1302,12 +1361,22 @@
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const f = readForm(form);
+      // New parents (father first), or null when they are the same as before.
+      f.parents = kind === 'details' && (f.father !== slots.father || f.mother !== slots.mother)
+        ? [f.father, f.mother].filter(Boolean) : null;
       const problem = checkForm(f);
       if (problem) return formError(form, problem);
       if (editor.on) saveEdit(kind, targetId, f, picked, form);
       else sendSuggestion(kind, targetId, f, picked, form);
     });
-    if (!suggestion) form.elements.name.focus({ preventScroll: true });
+    if (focus === 'parents') {
+      const pick = form.querySelector('.parent-pick');
+      pick.classList.add('flash');
+      requestAnimationFrame(() => pick.scrollIntoView({ block: 'center' }));
+      form.elements.father.focus({ preventScroll: true });
+    } else if (!suggestion) {
+      form.elements.name.focus({ preventScroll: true });
+    }
   }
 
   function readForm(form) {
@@ -1318,14 +1387,16 @@
       name: val('name'), nickname: val('nickname'), gender: gender ? gender.value : '', born: val('born'), died: val('died'),
       deceased: Boolean(el.deceased && el.deceased.checked) || Boolean(val('died')), place: val('place'),
       bio: el.bio ? el.bio.value.trim() : '', other: val('other'), from: val('from'),
+      father: val('father'), mother: val('mother'),
     };
   }
 
   function checkForm(f) {
     if (!f.name) return 'Please write their name.';
     for (const key of ['born', 'died']) {
-      if (f[key] && !/\d{4}/.test(f[key])) return `${FIELD_LABELS[key]} needs a year, e.g. 1952 or 1952-08-21.`;
+      if (f[key] && !/(^|\D)\d{4}(\D|$)/.test(f[key])) return `${FIELD_LABELS[key]} needs a four-digit year, e.g. 1952 or 1952-08-21.`;
     }
+    if (f.father && f.father === f.mother) return 'Father and mother can’t be the same person.';
     if (!editor.on && !f.from) return 'Please write your name, so they know who it’s from.';
     return '';
   }
@@ -1386,6 +1457,8 @@
       if (!ok) return null;
       // It came in a link, so keep only the fields the form knows.
       s.fields = Object.fromEntries(Object.entries(s.fields).filter(([k, v]) => EDITABLE.includes(k) && (v == null || typeof v !== 'object')));
+      const ids = Array.isArray(s.parents) ? s.parents.filter((x) => typeof x === 'string' && x) : null;
+      if (s.kind === 'details' && ids && ids.length <= 2) s.parents = ids; else delete s.parents;
       s.from = clip(str(s.from), 60);
       return s;
     } catch {
@@ -1399,6 +1472,10 @@
     if (s.kind === 'details') {
       const now = currentFields(p);
       const changes = Object.entries(s.fields).map(([k, v]) => `• ${FIELD_LABELS[k]}: ${show(now[k])} → ${show(v)}`);
+      if (s.parents) {
+        const names = (ids) => ids.map((x) => (person(x) ? person(x).name : x)).join(' and ') || '(none)';
+        changes.push(`• Parents: ${names(p.parents)} → ${names(s.parents)}`);
+      }
       if (s.photo) changes.push('• A new photo (attached)');
       return `Family tree: a correction for ${p.name}, from ${s.from}:\n${changes.join('\n')}`;
     }
@@ -1420,7 +1497,7 @@
         const v = key === 'deceased' ? f.deceased : f[key];
         if (String(v || '') !== String(now[key] || '')) fields[key] = v === '' ? null : v;
       }
-      if (!Object.keys(fields).length && !photo) return formError(form, 'Nothing has been changed yet.');
+      if (!Object.keys(fields).length && !photo && !f.parents) return formError(form, 'Nothing has been changed yet.');
     } else {
       for (const key of EDITABLE) {
         const v = key === 'deceased' ? f.deceased && !f.died : f[key];
@@ -1430,6 +1507,7 @@
     try { localStorage.setItem(NAME_KEY, f.from); } catch { /* fine */ }
     const s = { v: 1, kind, target: targetId, fields, from: f.from };
     if (kind === 'child' && f.other) s.other = f.other;
+    if (f.parents) s.parents = f.parents;
     if (photo) s.photo = true;
     const text = `${suggestionText(s)}\n\nTo check it and add it to the tree: ${siteBase()}#${code}/~${toB64url(JSON.stringify(s))}`;
     const number = str(meta.keeper_whatsapp).replace(/\D/g, '');
@@ -1551,7 +1629,14 @@
           return { ...block(x).data };
         };
         const target = rawOf(targetId);
-        if (kind === 'details') return store.applyChanges(text, [{ replace: targetId, person: mergeFields(target, f, photoPath) }]);
+        if (kind === 'details') {
+          const next = mergeFields(target, f, photoPath);
+          if (f.parents) {
+            f.parents.forEach(rawOf); // still in the file
+            if (f.parents.length) next.parents = f.parents; else delete next.parents;
+          }
+          return store.applyChanges(text, [{ replace: targetId, person: next }]);
+        }
         if (block(id)) throw new Error('Someone just added a person with the same id. Press Save again.');
         const fresh = mergeFields({ id }, f, photoPath);
         if (kind === 'spouse') return store.applyChanges(text, [{ add: { ...fresh, spouses: [targetId] }, after: targetId }]);

@@ -316,6 +316,14 @@ body.panel-open .zoom { right: 416px; }
 .chip:hover, .chip:focus-visible { border-color: var(--accent); outline: none; }
 .chip > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip small { color: var(--muted); }
+.rel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -6px 0 3px; }
+.rel-head h3 { margin: 0; }
+.rel-edit {
+  padding: 6px 2px; border: 0; background: none; color: var(--accent);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.rel-edit:hover, .rel-edit:focus-visible { text-decoration: underline; outline: none; }
+.none { color: var(--muted); font-size: 13.5px; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 22px 28px 28px; }
 .btn {
@@ -366,6 +374,10 @@ body.panel-open .zoom { right: 416px; }
 .form-error { margin: 0; color: var(--accent); font-size: 14px; font-weight: 500; }
 .edit-form .actions { padding: 2px 0 0; }
 .hint { margin: 0; color: var(--muted); font-size: 12.5px; }
+.parent-pick { display: grid; gap: 10px; margin: 0 -12px; padding: 12px; border-radius: 12px; }
+.parent-pick.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .parent-pick.flash { animation: none; } }
 .sent { padding: 36px 28px 28px; }
 .sent h2 { margin: 0 0 10px; font: 600 30px/1.1 var(--serif); }
 .sent p { margin: 0 0 12px; }
