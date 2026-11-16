@@ -1,17 +1,17 @@
 <!doctype html>
-<html lang="en" data-build="20261116142345">
+<html lang="en" data-build="20261116151707">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>The Kakkad Family</title>
   <meta name="robots" content="noindex">
-  <meta name="description" content="Eight generations of the Kakkad family">
-  <!-- Link previews (WhatsApp etc.). The build fills these in from family.json; they are the only readable text. -->
+  <meta name="description" content="Kakkad family">
+  <!-- Link previews (WhatsApp etc.). The build fills these in from family.yaml; they are the only readable text. -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="The Kakkad Family">
-  <meta property="og:description" content="Eight generations of the Kakkad family">
+  <meta property="og:description" content="Kakkad family">
   <meta property="og:url" content="https://kandarpkakkad.github.io/family-tree/">
-  <meta property="og:image" content="https://kandarpkakkad.github.io/family-tree/preview.png?v=20261116142345">
+  <meta property="og:image" content="https://kandarpkakkad.github.io/family-tree/preview.png?v=20261116151707">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="style.css?v=20261116142345">
+  <link rel="stylesheet" href="style.css?v=20261116151707">
 </head>
 <body>
   <header class="topbar" id="topbar">
@@ -65,6 +65,13 @@
   </div>
   <noscript><div class="status error"><div class="box"><h2>JavaScript is off</h2><p>This family tree needs JavaScript to draw.</p></div></div></noscript>
 
+  <!-- Shown to the tree's editor once signed in on this device -->
+  <div id="editbar" class="editbar" hidden>
+    <span>Editing <b>family.yaml</b></span>
+    <button id="signOut" type="button">Sign out</button>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
   <div class="zoom" role="group" aria-label="View">
     <button id="layout" type="button" title="Show top-down" aria-label="Show top-down">
       <!-- the shape you switch to: top-down tree, or generations left to right -->
@@ -89,6 +96,6 @@
     <div id="panelBody"></div>
   </aside>
 
-  <script src="app.js?v=20261116142345"></script>
+  <script src="app.js?v=20261116151707"></script>
 </body>
 </html>

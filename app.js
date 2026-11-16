@@ -3,7 +3,7 @@
  *
  * The published site has data.json, which is encrypted (see build/build.mjs). The code
  * after # in the link opens it; links look like  …/#code  or  …/#code/person-id.
- * A local preview (serve.ps1) has no data.json and reads family.json directly instead.
+ * A local preview (serve.ps1) has no data.json and reads family.yaml directly instead.
  */
 (() => {
   'use strict';
@@ -26,6 +26,7 @@
     notice: $('notice'), viewport: $('viewport'), world: $('world'), links: $('links'), cards: $('cards'),
     status: $('status'), panel: $('panel'), panelBody: $('panelBody'), panelClose: $('panelClose'),
     zoomIn: $('zoomIn'), zoomOut: $('zoomOut'), zoomFit: $('zoomFit'), layout: $('layout'),
+    editbar: $('editbar'), signOut: $('signOut'), toast: $('toast'),
   };
 
   const people = new Map();       // id -> person
@@ -38,7 +39,13 @@
   let bounds = { w: 0, h: 0 };
   let code = '';                  // the access code that opened the tree (kept in links)
   let dataKey = null;             // decrypts photos when the tree came encrypted
-  const photos = new Map();       // encrypted photo path -> object URL, a pending promise, or null
+  const photos = new Map();       // photo key -> object URL, a pending promise, or null
+  let meta = {};                  // the settings at the top of family.yaml
+  const TOKEN_KEY = 'family-tree:editor-token';
+  const NAME_KEY = 'family-tree:my-name';
+  // The editor saves straight into family.yaml (see edit-store.mjs); everyone else sends suggestions.
+  const editor = { on: false, repo: null, store: null, yaml: null, text: '' };
+  let pendingSuggestion = null;
 
   /* ---------- Small helpers ---------- */
 
@@ -103,35 +110,56 @@
     return p.deceased ? 'Late' : '';
   }
 
+  const imageType = (path) => ({ png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif' }[path.split('.').pop().toLowerCase()] || 'image/jpeg');
+
+  // Where a photo comes from: the published site's encrypted copy, the private repo (for the
+  // editor, who sees family.yaml as it is now), or null for a plain address used as it is.
+  function photoSource(p) {
+    if (!p.photo) return null;
+    if (p.photoType) {
+      return {
+        key: p.photo,
+        type: p.photoType,
+        fetch: async () => {
+          const res = await fetch(`${p.photo}?v=${encodeURIComponent(BUILD)}`);
+          if (!res.ok) throw new Error(res.status);
+          return openSealed(dataKey, new Uint8Array(await res.arrayBuffer()));
+        },
+      };
+    }
+    if (editor.on && !/^https?:\/\//i.test(p.photo)) {
+      return { key: `repo:${p.photo}`, type: imageType(p.photo), fetch: () => editor.repo.readFile(p.photo) };
+    }
+    return null;
+  }
+
   function avatar(p, size = '') {
     let src = p.photo;
     let wait = '';
-    if (src && p.photoType) {            // encrypted photo: show initials until it's decrypted
-      src = photos.get(p.photo);
+    const source = photoSource(p);
+    if (source) {                        // show the initials until the photo arrives
+      src = photos.get(source.key);
       if (typeof src !== 'string') {
         src = '';
-        if (photos.get(p.photo) !== null) { wait = ` data-photo="${esc(p.photo)}"`; loadPhoto(p); }
+        if (photos.get(source.key) !== null) { wait = ` data-photo="${esc(source.key)}"`; loadPhoto(source); }
       }
     }
     const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async">` : '';
-    return `<span class="avatar ${size} g-${p.gender}"${wait} aria-hidden="true"><span>${esc(initials(p))}</span>${img}</span>`;
+    return `<span class="avatar ${size} g-${p.gender || 'unknown'}"${wait} aria-hidden="true"><span>${esc(initials(p))}</span>${img}</span>`;
   }
 
-  function loadPhoto(p) {
-    if (photos.has(p.photo)) return;
-    photos.set(p.photo, (async () => {
+  function loadPhoto(source) {
+    if (photos.has(source.key)) return;
+    photos.set(source.key, (async () => {
       try {
-        const res = await fetch(`${p.photo}?v=${encodeURIComponent(BUILD)}`);
-        if (!res.ok) throw new Error(res.status);
-        const plain = await openSealed(dataKey, new Uint8Array(await res.arrayBuffer()));
-        const url = URL.createObjectURL(new Blob([plain], { type: p.photoType }));
-        photos.set(p.photo, url);
-        document.querySelectorAll(`.avatar[data-photo="${CSS.escape(p.photo)}"]`).forEach((el) => {
+        const url = URL.createObjectURL(new Blob([await source.fetch()], { type: source.type }));
+        photos.set(source.key, url);
+        document.querySelectorAll(`.avatar[data-photo="${CSS.escape(source.key)}"]`).forEach((el) => {
           el.removeAttribute('data-photo');
           el.insertAdjacentHTML('beforeend', `<img src="${url}" alt="">`);
         });
       } catch {
-        photos.set(p.photo, null); // keep the initials
+        photos.set(source.key, null); // keep the initials
       }
     })());
   }
@@ -156,24 +184,26 @@
     unlock(bundle);
   }
 
-  // Local preview: no encrypted data.json, so read family.json from the repo.
+  // Local preview (serve.ps1): no encrypted data.json, so read family.yaml from the repo,
+  // with the same YAML reader the build uses.
   async function loadPreview() {
-    let text;
+    let text, yaml;
     try {
-      const res = await fetch('family.json', { cache: 'no-cache' });
+      const res = await fetch('family.yaml', { cache: 'no-cache' });
       if (!res.ok) throw new Error(`the server answered ${res.status}`);
       text = await res.text();
+      yaml = await import('./js-yaml.mjs');
     } catch (err) {
-      return fail('Could not load the family data', `Tried <code>family.json</code>, but ${esc(err.message)}.`);
+      return fail('Could not load the family data', `Tried <code>family.yaml</code>, but ${esc(err.message)}. Preview with <code>serve.ps1</code>.`);
     }
     let data;
     try {
-      data = JSON.parse(text.replace(/^﻿/, ''));
+      data = yaml.load(text.replace(/^﻿/, ''));
     } catch (err) {
-      return fail('family.json has a mistake in it',
-        `${esc(err.message)}${esc(where(text, err.message))}.<br><br>Usual causes: a missing comma between two entries, a comma after the last entry in a list, or a missing quote mark.`);
+      return fail('family.yaml has a mistake in it',
+        `<pre class="err">${esc(err.message)}</pre>Usual causes: a tab instead of spaces, an entry indented differently from the ones around it, or a <code>: </code> inside a name (put that name in quotes).`);
     }
-    start(data);
+    start(data || {});
   }
 
   const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -261,30 +291,23 @@
     });
   }
 
-  // Turn "at position 1234" into a line and column when the browser didn't give one.
-  function where(text, msg) {
-    if (/line \d+/i.test(msg)) return '';
-    const m = /position (\d+)/.exec(msg);
-    if (!m) return '';
-    const before = text.slice(0, +m[1]).split('\n');
-    return ` (line ${before.length}, column ${before[before.length - 1].length + 1})`;
-  }
-
   function fail(title, html) {
-    ui.status.innerHTML = `<div class="box"><h2>${esc(title)}</h2><p>${html}</p></div>`;
+    ui.status.innerHTML = `<div class="box"><h2>${esc(title)}</h2><div class="msg">${html}</div></div>`;
     ui.status.hidden = false;
   }
 
-  function start(data) {
+  // Reads the family into the index, header and drop-down. Used on opening and after each save.
+  function ingest(data) {
     const list = Array.isArray(data) ? data : data && data.people;
-    if (!Array.isArray(list)) return fail('No "people" list found', 'family.json should look like <code>{ "title": "…", "people": [ … ] }</code>.');
-    const meta = Array.isArray(data) ? {} : data;
+    if (!Array.isArray(list)) { fail('No people list found', '<code>family.yaml</code> needs a <code>people:</code> list.'); return false; }
+    meta = Array.isArray(data) ? {} : data;
     const title = str(meta.title) || 'Family Tree';
     ui.title.textContent = title;
     document.title = title;
 
+    people.clear();
     const problems = buildIndex(list);
-    if (!people.size) return fail('No one here yet', 'Add people to the <code>"people"</code> list in <code>data/family.json</code>.');
+    if (!people.size) { fail('No one here yet', 'Add people under <code>people:</code> in <code>family.yaml</code>.'); return false; }
 
     ui.subtitle.textContent = [str(meta.subtitle), `${people.size} ${people.size === 1 ? 'person' : 'people'}`, plural(generations(), 'generation')]
       .filter(Boolean).join(' · ');
@@ -292,19 +315,40 @@
     ui.line.innerHTML = lines.map((l) => `<option value="${esc(l.id)}">${esc(l.label)}</option>`).join('');
     ui.lineWrap.hidden = lines.length < 2;
     showProblems(problems);
-    ui.status.hidden = true;
+    return true;
+  }
 
+  function defaultRoot() {
     const preferred = str(meta.root);
-    state.root = canonical(people.has(preferred) ? preferred : lines.length ? lines[0].id : people.keys().next().value);
+    return canonical(people.has(preferred) ? preferred : lines.length ? lines[0].id : people.keys().next().value);
+  }
+
+  function start(data) {
+    if (!ingest(data)) return;
+    ui.status.hidden = true;
+    state.root = defaultRoot();
     let saved = '';
     try { saved = localStorage.getItem(LAYOUT_KEY) || ''; } catch { /* fine */ }
     setLayout((saved || str(meta.layout).toLowerCase() || 'across') === 'across');
     render();
     fit(false, true);
     document.body.classList.add('ready');
+    pendingSuggestion = readSuggestion();
     const wanted = hashId();
     if (wanted) focusPerson(wanted, false);
     else setHash('');
+    afterStart();
+  }
+
+  // After a save (or when the editor's live copy arrives): same view, fresh family.
+  function reload(data, focusId) {
+    const keepRoot = state.root;
+    if (!ingest(data)) return;
+    state.root = people.has(keepRoot) ? canonical(keepRoot) : defaultRoot();
+    render();
+    if (focusId && people.has(focusId)) focusPerson(focusId);
+    else if (state.selected && people.has(state.selected)) select(state.selected);
+    else closePanel();
   }
 
   /* ---------- Building the family index ---------- */
@@ -326,7 +370,7 @@
         gender: normGender(raw.gender),
         born: str(raw.born),
         died: str(raw.died),
-        deceased: Boolean(str(raw.died)) || raw.deceased === true,
+        deceased: Boolean(str(raw.died)) || raw.deceased === true || /^(yes|y|true)$/i.test(str(raw.deceased)),
         place: str(raw.place),
         photo: str(raw.photo),
         photoType: str(raw.photoType),
@@ -334,6 +378,7 @@
         rawParents: toList(raw.parents),
         rawSpouses: toList(raw.spouses).concat(toList(raw.spouse)),
         parents: [], spouses: [], children: [],
+        raw,                             // as written, for the edit forms
       });
     });
 
@@ -680,9 +725,10 @@
   }
 
   function showProblems(list) {
+    ui.notice.hidden = true;
     if (!list.length) return;
-    console.warn(`family.json problems:\n- ${list.join('\n- ')}`);
-    ui.notice.innerHTML = `<details><summary>${plural(list.length, 'problem')} found in family.json</summary><ul>${list.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></details>`
+    console.warn(`family.yaml problems:\n- ${list.join('\n- ')}`);
+    ui.notice.innerHTML = `<details><summary>${plural(list.length, 'problem')} found in family.yaml</summary><ul>${list.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></details>`
       + '<button type="button" class="notice-close" aria-label="Dismiss">×</button>';
     ui.notice.hidden = false;
     ui.notice.querySelector('.notice-close').addEventListener('click', () => { ui.notice.hidden = true; });
@@ -739,6 +785,7 @@
       + (facts.length ? `<dl class="facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>` : '')
       + (p.bio ? `<div class="bio">${p.bio.split(/\n\s*\n/).map((t) => `<p>${esc(t)}</p>`).join('')}</div>` : '')
       + rel.map(([label, chips]) => `<section class="rel"><h3>${label}</h3><div class="chips">${chips.join('')}</div></section>`).join('')
+      + editActionsHTML(p)
       + `<div class="actions">${actions.join('')}</div>`;
   }
 
@@ -1064,6 +1111,10 @@
   ui.panel.addEventListener('click', (e) => {
     const go = e.target.closest('[data-go]');
     if (go) return focusPerson(go.dataset.go);
+    const edit = e.target.closest('[data-edit]');
+    if (edit && state.selected) return openForm(edit.dataset.edit, state.selected);
+    const back = e.target.closest('[data-back]');
+    if (back) return people.has(back.dataset.back) ? select(back.dataset.back) : closePanel();
     const act = e.target.closest('[data-act]');
     if (!act || !state.selected) return;
     if (act.dataset.act === 'line') showLine(state.selected);
@@ -1112,6 +1163,385 @@
   const setHeaderHeight = () => document.documentElement.style.setProperty('--header-h', `${ui.topbar.offsetHeight}px`);
   new ResizeObserver(setHeaderHeight).observe(ui.topbar);
   setHeaderHeight();
+
+  /* ---------- Changing the tree from the website ---------- */
+
+  // Relatives fill in a form and send it to the tree's editor on WhatsApp. The editor, signed in
+  // with a GitHub token on their own devices, uses the same forms to save into family.yaml.
+  const FIELD_LABELS = { name: 'Name', nickname: 'Nickname', gender: 'Gender', born: 'Born', died: 'Died', deceased: 'Passed away', place: 'Place', bio: 'About' };
+  const EDITABLE = Object.keys(FIELD_LABELS);
+  const RELATION = { child: 'child', spouse: 'husband or wife', parent: 'parent' };
+  const ICON_PEN = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M13.6 3.6l2.8 2.8L7 15.8 3.5 16.5l.7-3.5z"/></svg>';
+  const ICON_CAMERA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+  const keeperName = () => str(meta.keeper_name) || 'the tree’s editor';
+  const siteBase = () => str(meta.site_url) || location.origin + location.pathname;
+  const clip = (s, n = 160) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+  function rememberedName() {
+    try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; }
+  }
+
+  function toast(message, ms = 6000) {
+    ui.toast.textContent = message;
+    ui.toast.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => { ui.toast.hidden = true; }, ms);
+  }
+
+  function editActionsHTML(p) {
+    if (!code && !editor.on) return ''; // the local preview has nobody to send to
+    const parent = p.parents.length < 2 ? '<button class="btn" type="button" data-edit="parent">+ Parent</button>' : '';
+    return `<section class="edit-box"><h3>${editor.on ? 'Edit' : 'Something to add or correct?'}</h3><div class="edit-actions">`
+      + `<button class="btn" type="button" data-edit="details">${ICON_PEN}<span>${editor.on ? 'Edit details' : 'Correct details'}</span></button>`
+      + `<button class="btn" type="button" data-edit="child">+ Child</button><button class="btn" type="button" data-edit="spouse">+ Spouse</button>${parent}`
+      + '</div></section>';
+  }
+
+  // A person's editable details as they are now.
+  function currentFields(p) {
+    const raw = p.raw || {};
+    return {
+      name: str(raw.name), nickname: str(raw.nickname), gender: p.gender === 'unknown' ? '' : p.gender,
+      born: str(raw.born), died: str(raw.died), deceased: p.deceased, place: str(raw.place), bio: str(raw.bio),
+    };
+  }
+
+  function formTitle(kind, p) {
+    if (kind === 'details') return editor.on ? `Edit ${p.name}` : `Correct ${p.name}’s details`;
+    if (kind === 'child') return `Add a child of ${p.name}`;
+    if (kind === 'spouse') return `Add ${firstName(p)}’s husband or wife`;
+    return `Add ${firstName(p)}’s father or mother`;
+  }
+
+  function openForm(kind, targetId, suggestion = null) {
+    const p = person(targetId);
+    if (!p) return;
+    const v = kind === 'details' ? currentFields(p) : {};
+    if (suggestion) for (const [k, x] of Object.entries(suggestion.fields || {})) v[k] = x == null ? '' : x;
+    const field = (name, label, extra = '') => `<label class="field"><span>${label}</span><input name="${name}" value="${esc(v[name] || '')}" autocomplete="off" ${extra}></label>`;
+    const others = kind === 'child' ? p.spouses.map(person) : [];
+    const radio = (g, label) => `<label><input type="radio" name="gender" value="${g}"${v.gender === g ? ' checked' : ''}> ${label}</label>`;
+    const photoNow = kind === 'details' && p.photo ? avatar(p, 'lg') : `<span class="avatar lg g-unknown">${ICON_CAMERA}</span>`;
+    ui.panelBody.innerHTML = `
+      <form class="edit-form" id="editForm" novalidate>
+        <h2>${esc(formTitle(kind, p))}</h2>
+        ${suggestion ? `<p class="from">Suggested by ${esc(suggestion.from || 'a relative')}. Check it, change anything you like, then save.${suggestion.photo ? ' They sent a photo too: save it from WhatsApp and choose it below.' : ''}</p>` : ''}
+        ${field('name', 'Full name', 'required')}
+        ${field('nickname', 'Nickname <small>(optional)</small>')}
+        <div class="field"><span>Gender</span><div class="radios" role="radiogroup">${radio('male', 'Male')}${radio('female', 'Female')}</div></div>
+        <div class="two">${field('born', 'Born', 'placeholder="1952-08-21 or 1952"')}${field('place', 'Place')}</div>
+        <div class="two">${field('died', 'Died', 'placeholder="year or date"')}
+          <label class="check"><input type="checkbox" name="deceased"${v.deceased ? ' checked' : ''}> Passed away</label></div>
+        ${others.length ? `<label class="field"><span>Other parent</span><select name="other">${others.map((o) => `<option value="${esc(o.id)}"${suggestion && suggestion.other === o.id ? ' selected' : ''}>${esc(o.name)}</option>`).join('')}<option value="">Not listed</option></select></label>` : ''}
+        <label class="field"><span>About them <small>(optional)</small></span><textarea name="bio" rows="4">${esc(v.bio || '')}</textarea></label>
+        <div class="photo-pick"><span class="photo-now">${photoNow}</span>
+          <label class="btn"><input type="file" name="photo" accept="image/*"><span>${kind === 'details' && p.photo ? 'Change photo' : 'Choose a photo'}</span></label></div>
+        ${editor.on ? '' : `<label class="field"><span>Your name</span><input name="from" value="${esc(rememberedName())}" autocomplete="name" required></label>`}
+        <p class="form-error" role="alert" hidden></p>
+        <div class="actions"><button class="btn primary" type="submit">${editor.on ? 'Save' : `Send to ${esc(keeperName())}`}</button>
+          <button class="btn" type="button" data-back="${esc(targetId)}">Cancel</button></div>
+        <p class="hint">${editor.on ? 'Saves into family.yaml. The site updates for everyone about a minute later.'
+          : `Opens WhatsApp with your suggestion. ${esc(keeperName())} checks it before it goes on the tree.`}</p>
+      </form>`;
+    ui.panel.scrollTop = 0;
+    const form = $('editForm');
+    let picked = null;
+    form.elements.photo.addEventListener('change', async () => {
+      const file = form.elements.photo.files[0];
+      if (!file) return;
+      try {
+        picked = await resizePhoto(file);
+        form.querySelector('.photo-now').innerHTML = `<span class="avatar lg"><img src="${URL.createObjectURL(picked)}" alt=""></span>`;
+      } catch {
+        formError(form, 'That photo couldn’t be read. Try another one.');
+      }
+    });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = readForm(form);
+      const problem = checkForm(f);
+      if (problem) return formError(form, problem);
+      if (editor.on) saveEdit(kind, targetId, f, picked, form);
+      else sendSuggestion(kind, targetId, f, picked, form);
+    });
+    if (!suggestion) form.elements.name.focus({ preventScroll: true });
+  }
+
+  function readForm(form) {
+    const el = form.elements;
+    const val = (n) => (el[n] ? str(el[n].value) : '');
+    const gender = form.querySelector('input[name="gender"]:checked');
+    return {
+      name: val('name'), nickname: val('nickname'), gender: gender ? gender.value : '', born: val('born'), died: val('died'),
+      deceased: Boolean(el.deceased && el.deceased.checked) || Boolean(val('died')), place: val('place'),
+      bio: el.bio ? el.bio.value.trim() : '', other: val('other'), from: val('from'),
+    };
+  }
+
+  function checkForm(f) {
+    if (!f.name) return 'Please write their name.';
+    for (const key of ['born', 'died']) {
+      if (f[key] && !/\d{4}/.test(f[key])) return `${FIELD_LABELS[key]} needs a year, e.g. 1952 or 1952-08-21.`;
+    }
+    if (!editor.on && !f.from) return 'Please write your name, so they know who it’s from.';
+    return '';
+  }
+
+  function formError(form, message) {
+    const el = form.querySelector('.form-error');
+    el.textContent = message;
+    el.hidden = false;
+    el.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Square, about 400 × 400, cropped a little above the middle where faces usually are.
+  async function resizePhoto(file) {
+    const bitmap = await createImageBitmap(file);
+    const side = Math.min(bitmap.width, bitmap.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 400;
+    canvas.getContext('2d').drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) * 0.3, side, side, 0, 0, 400, 400);
+    if (bitmap.close) bitmap.close();
+    return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('photo'))), 'image/jpeg', 0.86));
+  }
+
+  // A form's details on top of what's already written; empty fields are taken out.
+  function mergeFields(base, f, photoPath) {
+    const out = { ...base };
+    for (const key of EDITABLE) {
+      const v = key === 'deceased' ? f.deceased && !f.died : f[key];
+      if (v) out[key] = v; else delete out[key];
+    }
+    if (photoPath) out.photo = photoPath;
+    return out;
+  }
+
+  function makeId(name, taken) {
+    const words = fold(name).split(/\s+/).map((w) => w.replace(/[^a-z0-9]/g, '')).filter(Boolean);
+    const tries = [words[0], words.slice(0, 2).join('-')].filter(Boolean);
+    const free = (id) => !taken.has(id) && !people.has(id);
+    const first = tries.find(free);
+    if (first) return first;
+    const base = tries[0] || 'person';
+    let n = 2;
+    while (!free(`${base}${n}`)) n++;
+    return `${base}${n}`;
+  }
+
+  /* Suggestions: a WhatsApp message with a summary and a link that opens the filled-in form. */
+
+  const toB64url = (s) => { let b = ''; new TextEncoder().encode(s).forEach((c) => { b += String.fromCharCode(c); }); return btoa(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const fromB64url = (s) => new TextDecoder().decode(fromB64(s.replace(/-/g, '+').replace(/_/g, '/')));
+
+  function readSuggestion() {
+    const h = readHash();
+    if (!h.person.startsWith('~')) return null;
+    try {
+      const s = JSON.parse(fromB64url(h.person.slice(1)));
+      const ok = s && s.v === 1 && typeof s.target === 'string' && (s.kind === 'details' || RELATION[s.kind])
+        && s.fields && typeof s.fields === 'object';
+      if (!ok) return null;
+      // It came in a link, so keep only the fields the form knows.
+      s.fields = Object.fromEntries(Object.entries(s.fields).filter(([k, v]) => EDITABLE.includes(k) && (v == null || typeof v !== 'object')));
+      s.from = clip(str(s.from), 60);
+      return s;
+    } catch {
+      return null;
+    }
+  }
+
+  function suggestionText(s) {
+    const p = person(s.target);
+    const show = (v) => (v === true ? 'yes' : v === false ? 'no' : v === 'male' ? 'Male' : v === 'female' ? 'Female' : v ? clip(String(v)) : '(empty)');
+    if (s.kind === 'details') {
+      const now = currentFields(p);
+      const changes = Object.entries(s.fields).map(([k, v]) => `• ${FIELD_LABELS[k]}: ${show(now[k])} → ${show(v)}`);
+      if (s.photo) changes.push('• A new photo (attached)');
+      return `Family tree: a correction for ${p.name}, from ${s.from}:\n${changes.join('\n')}`;
+    }
+    const other = s.other && person(s.other);
+    const who = s.kind === 'child' ? `a child of ${p.name}${other ? ` and ${other.name}` : ''}`
+      : s.kind === 'spouse' ? `${p.name}’s husband or wife`
+        : `${p.name}’s ${s.fields.gender === 'male' ? 'father' : s.fields.gender === 'female' ? 'mother' : 'parent'}`;
+    const details = EDITABLE.filter((k) => s.fields[k]).map((k) => `• ${FIELD_LABELS[k]}: ${show(s.fields[k])}`);
+    if (s.photo) details.push('• A photo (attached)');
+    return `Family tree: ${s.from} suggests adding ${who}:\n${details.join('\n')}`;
+  }
+
+  function sendSuggestion(kind, targetId, f, photo, form) {
+    const p = person(targetId);
+    const fields = {};
+    if (kind === 'details') {
+      const now = currentFields(p);
+      for (const key of EDITABLE) {
+        const v = key === 'deceased' ? f.deceased : f[key];
+        if (String(v || '') !== String(now[key] || '')) fields[key] = v === '' ? null : v;
+      }
+      if (!Object.keys(fields).length && !photo) return formError(form, 'Nothing has been changed yet.');
+    } else {
+      for (const key of EDITABLE) {
+        const v = key === 'deceased' ? f.deceased && !f.died : f[key];
+        if (v) fields[key] = v;
+      }
+    }
+    try { localStorage.setItem(NAME_KEY, f.from); } catch { /* fine */ }
+    const s = { v: 1, kind, target: targetId, fields, from: f.from };
+    if (kind === 'child' && f.other) s.other = f.other;
+    if (photo) s.photo = true;
+    const text = `${suggestionText(s)}\n\nTo check it and add it to the tree: ${siteBase()}#${code}/~${toB64url(JSON.stringify(s))}`;
+    const number = str(meta.keeper_whatsapp).replace(/\D/g, '');
+    const file = photo && new File([photo], `${fold(f.name || p.name).replace(/[^a-z0-9]+/g, '-')}.jpg`, { type: 'image/jpeg' });
+    let shared = false;
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], text }).catch(() => {}); // pick the editor's chat in WhatsApp
+      shared = true;
+    } else {
+      window.open(`https://wa.me/${number}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    }
+    ui.panelBody.innerHTML = `<div class="sent"><h2>Thank you</h2>
+      <p>Your suggestion is ready in WhatsApp${number || shared ? '' : ': choose ' + esc(keeperName()) + '’s chat'}. Press send there, and ${esc(keeperName())} will check it before it goes on the tree.</p>
+      ${file && !shared ? '<p><strong>Please attach the photo in WhatsApp too.</strong></p>' : ''}
+      <div class="actions"><button class="btn" type="button" data-back="${esc(targetId)}">Back to ${esc(p.name)}</button></div></div>`;
+  }
+
+  /* The editor: signs in once per device with a GitHub token and saves straight into family.yaml. */
+
+  function storedToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
+  }
+
+  async function afterStart() {
+    const token = storedToken();
+    if (token && code) {
+      try {
+        await startEditor(token);
+      } catch (err) {
+        if (err.status === 401) { try { localStorage.removeItem(TOKEN_KEY); } catch { /* fine */ } }
+        toast(`Couldn’t open family.yaml for editing: ${err.message}`, 9000);
+      }
+    } else if (code && new URLSearchParams(location.search).has('editor')) {
+      return showSignIn();
+    }
+    handleSuggestion();
+  }
+
+  function handleSuggestion() {
+    const s = pendingSuggestion;
+    pendingSuggestion = null;
+    if (!s) return;
+    if (!editor.on) return toast(`This link is a suggested change for ${keeperName()} to check.`);
+    if (!people.has(s.target)) return toast('That suggestion is about someone who isn’t in the tree any more.');
+    focusPerson(s.target, false);
+    openForm(s.kind, s.target, s);
+  }
+
+  async function startEditor(token) {
+    const repoName = str(meta.data_repo);
+    if (!repoName) throw new Error('add data_repo to family.yaml first.');
+    const [store, yaml] = await Promise.all([import('./edit-store.mjs'), import('./js-yaml.mjs')]);
+    const repo = new store.Repo(repoName, token);
+    const text = await repo.read();
+    let data;
+    try {
+      data = yaml.load(text);
+    } catch (err) {
+      throw new Error(`family.yaml on GitHub has a mistake in it (${err.message.split('\n')[0]}). Fix that first.`);
+    }
+    Object.assign(editor, { on: true, repo, store, yaml, text });
+    try { localStorage.setItem(TOKEN_KEY, token); } catch { /* signed in for this visit only */ }
+    ui.editbar.hidden = false;
+    reload(data, state.selected); // the editor sees family.yaml as it is now, saved but not yet published
+  }
+
+  function showSignIn(message = '') {
+    const repoName = str(meta.data_repo) || 'the family repo';
+    const tokenUrl = `https://github.com/settings/personal-access-tokens/new?${new URLSearchParams({
+      name: 'Family tree editor', description: `Lets the family tree website save changes to family.yaml in ${repoName}`, expires_in: '366', contents: 'write',
+    })}`;
+    ui.status.innerHTML = `
+      <form class="box lock signin" id="signin" autocomplete="off">
+        <h2>Sign in to edit</h2>
+        <p>On this device, changes will save straight into <code>family.yaml</code>. It takes a GitHub token that can change <code>${esc(repoName)}</code>:</p>
+        <ol>
+          <li><a href="${esc(tokenUrl)}" target="_blank" rel="noopener">Create the token on GitHub</a>. The name, expiry and permission are filled in.</li>
+          <li>Under <b>Repository access</b>, choose <b>Only select repositories</b> and pick <b>${esc(repoName.split('/').pop())}</b>.</li>
+          <li>Press <b>Generate token</b>, then copy it and paste it here.</li>
+        </ol>
+        <div class="lock-row"><input id="token" type="password" placeholder="github_pat_…" aria-label="GitHub token" autocomplete="off" required><button class="btn primary" type="submit">Sign in</button></div>
+        <p class="lock-error" id="signinError" role="alert"${message ? '' : ' hidden'}>${esc(message)}</p>
+        <button class="link" type="button" id="signinCancel">Not now</button>
+      </form>`;
+    ui.status.hidden = false;
+    const form = $('signin'), button = form.querySelector('[type="submit"]');
+    $('signinCancel').addEventListener('click', () => { ui.status.hidden = true; handleSuggestion(); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      button.disabled = true;
+      button.textContent = 'Checking…';
+      try {
+        await startEditor(str($('token').value));
+        ui.status.hidden = true;
+        toast('Signed in. Edits on this device now save straight into family.yaml.');
+        handleSuggestion();
+      } catch (err) {
+        showSignIn(err.message);
+      }
+    });
+  }
+
+  async function saveEdit(kind, targetId, f, photo, form) {
+    const button = form.querySelector('[type="submit"]');
+    button.disabled = true;
+    button.textContent = 'Saving…';
+    try {
+      const { store } = editor;
+      const taken = new Set(store.findPeople(editor.text).blocks.map((b) => b.id));
+      const id = kind === 'details' ? targetId : makeId(f.name, taken);
+      const photoPath = photo ? `photos/${id}.jpg` : '';
+      const files = photo ? { [photoPath]: new Uint8Array(await photo.arrayBuffer()) } : {};
+      // Runs on the latest family.yaml from GitHub, so a change saved elsewhere meanwhile is kept.
+      const update = (text) => {
+        const doc = store.findPeople(text);
+        const block = (x) => doc.blocks.find((b) => b.id === x);
+        const rawOf = (x) => {
+          if (!block(x)) throw new Error(`${person(x) ? person(x).name : x} isn’t in family.yaml any more.`);
+          return { ...block(x).data };
+        };
+        const target = rawOf(targetId);
+        if (kind === 'details') return store.applyChanges(text, [{ replace: targetId, person: mergeFields(target, f, photoPath) }]);
+        if (block(id)) throw new Error('Someone just added a person with the same id. Press Save again.');
+        const fresh = mergeFields({ id }, f, photoPath);
+        if (kind === 'spouse') return store.applyChanges(text, [{ add: { ...fresh, spouses: [targetId] }, after: targetId }]);
+        if (kind === 'child') {
+          const other = f.other && block(f.other) ? rawOf(f.other) : null;
+          const otherId = other ? str(other.id) : '';
+          const parents = !other ? [targetId]
+            : normGender(target.gender) !== 'male' && normGender(other.gender) === 'male' ? [otherId, targetId] : [targetId, otherId];
+          const kids = doc.blocks.filter((b) => toList(b.data.parents).includes(targetId));
+          return store.applyChanges(text, [{ add: { ...fresh, parents }, after: kids.length ? kids[kids.length - 1].id : targetId }]);
+        }
+        const parents = toList(target.parents);
+        if (parents.length >= 2) throw new Error(`${str(target.name)} already has two parents listed.`);
+        const next = f.gender === 'male' ? [id, ...parents] : [...parents, id]; // father first
+        return store.applyChanges(text, [{ add: fresh, after: targetId }, { replace: targetId, person: { ...target, parents: next } }]);
+      };
+      const what = kind === 'details' ? `Update ${f.name}` : `Add ${f.name}, ${RELATION[kind]} of ${person(targetId).name}`;
+      const result = await editor.repo.commit(`${what}\n\nSaved from the family tree website.`, update, files);
+      editor.text = result.text;
+      if (photo) photos.set(`repo:${photoPath}`, URL.createObjectURL(photo));
+      reload(editor.yaml.load(result.text), id);
+      toast('Saved. The site updates for everyone in about a minute.');
+    } catch (err) {
+      button.disabled = false;
+      button.textContent = 'Save';
+      formError(form, err.message || 'Couldn’t save. Try again.');
+    }
+  }
+
+  ui.signOut.addEventListener('click', () => {
+    try { localStorage.removeItem(TOKEN_KEY); } catch { /* fine */ }
+    location.reload();
+  });
 
   /* ---------- Search ---------- */
 
